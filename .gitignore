@@ -1,5 +1,17 @@
-data/sentiment.db
+# Python
 __pycache__/
 *.pyc
-.DS_Store
+*.pyo
+
+# Database
 *.db
+*.sqlite
+
+# Environment
+.env
+
+# Mac
+.DS_Store
+
+# Logs
+*.log
