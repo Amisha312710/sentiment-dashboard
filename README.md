@@ -9,11 +9,11 @@
 
 ---
 
-## 🚀 Key Highlights & Architecture
+##  Key Highlights & Architecture
 
 - **Automated ETL Pipeline** — Ingests live API posts (HackerNews public API) + multi-domain streams with automatic deduplication into SQLite.
 - **Dual NLP Sentiment Engines** — Combines **VADER** (specifically tuned for social media, punctuation, and capitalization) with **TextBlob** polarity & subjectivity metrics.
-- **⚡ Real-Time Live Playground** — Interactive UI tab allowing recruiters and visitors to enter custom text and receive instant sentiment inference and gauge metrics.
+- ** Real-Time Live Playground** — Interactive UI tab allowing recruiters and visitors to enter custom text and receive instant sentiment inference and gauge metrics.
 - **5 Market Domains** — AI & Technology, Stock Market, Climate & Environment, Sports, Health & Wellness.
 - **Full Plotly Dark Theme UI** — Velocity curves, hourly distribution, sector radar charts, and CSV dataset export.
 - **Auto-Seeding On Deployment** — Automatic database initialization on fresh cloud deploys.
