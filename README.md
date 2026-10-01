@@ -7,9 +7,9 @@
 [![NLP](https://img.shields.io/badge/NLP-VADER%20%2B%20TextBlob-green.svg)](https://github.com/cjhutto/vaderSentiment)
 [![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen.svg)](tests/)
 
-### 🌐 Live Interactive Demo
-🚀 **Explore the live deployed platform:**  
-👉 **[amisha312710-sentiment-dashboard.streamlit.app](https://amisha312710-sentiment-dashboard-dashboardapp-rgmqvl.streamlit.app/)**
+### Live Interactive Demo
+**Explore the live deployed platform:**  
+**[amisha312710-sentiment-dashboard.streamlit.app](https://amisha312710-sentiment-dashboard-dashboardapp-rgmqvl.streamlit.app/)**
 
 ---
 
@@ -25,7 +25,7 @@
 
 ---
 
-## 🛠 Tech Stack
+##  Tech Stack
 
 - **Data Processing & Storage**: Python, Pandas, SQLite
 - **NLP Sentiment Engines**: VADER Sentiment Intensity Analyzer, TextBlob
@@ -34,7 +34,7 @@
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 
 ```text
 sentiment-dashboard/
@@ -57,7 +57,7 @@ sentiment-dashboard/
 
 ---
 
-## ⚡ Quick Start
+##  Quick Start
 
 ### 1. Clone & Install Dependencies
 ```bash
