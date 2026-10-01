@@ -2,10 +2,14 @@
 
 > An end-to-end automated ETL pipeline & real-time multi-model NLP sentiment intelligence dashboard across 5 industry domains.
 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://amisha312710-sentiment-dashboard-dashboardapp-rgmqvl.streamlit.app/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.30%2B-FF4B4B.svg)](https://streamlit.io/)
 [![NLP](https://img.shields.io/badge/NLP-VADER%20%2B%20TextBlob-green.svg)](https://github.com/cjhutto/vaderSentiment)
 [![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen.svg)](tests/)
+
+### 🌐 Live Interactive Demo
+🚀 **Explore the live deployed platform:**  
+👉 **[amisha312710-sentiment-dashboard.streamlit.app](https://amisha312710-sentiment-dashboard-dashboardapp-rgmqvl.streamlit.app/)**
 
 ---
 
