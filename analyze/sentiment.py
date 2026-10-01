@@ -1,80 +1,122 @@
 """
 analyze/sentiment.py
 ────────────────────
-PURPOSE: Run sentiment analysis on every cleaned post.
-
-WHAT YOU ALREADY KNOW: This is model.predict() from your ML workflow.
-TextBlob is a pre-trained NLP model. You pass it text, it returns:
-  - polarity:    -1.0 (very negative) → 0.0 (neutral) → +1.0 (very positive)
-  - subjectivity: 0.0 (objective fact) → 1.0 (personal opinion)
-
-You don't train anything here — it's inference only, same as using
-a pre-trained sklearn model or a HuggingFace pipeline.
+PURPOSE: Run multi-model sentiment analysis (TextBlob + VADER) on text.
+Provides dual NLP models:
+  - TextBlob: lexicon & pattern-based polarity (-1.0 to +1.0) & subjectivity (0 to 1)
+  - VADER: rule-based model specifically tuned for social media (emojis, caps, slang)
 """
 
 import pandas as pd
 from textblob import TextBlob
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+_vader = SentimentIntensityAnalyzer()
 
 
 def score_sentiment(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Adds sentiment columns to the DataFrame.
-
-    Input:  cleaned DataFrame (from cleaner.py)
-    Output: same DataFrame + these new columns:
-              sentiment_score  → float, -1 to +1
-              subjectivity     → float, 0 to 1
-              sentiment_label  → "Positive" / "Neutral" / "Negative"
-              sentiment_emoji  → for display in the dashboard
-
-    ML ANALOGY:
-      df["sentiment_score"] = model.predict(df["clean_text"])
-      That's literally what this does.
+    Adds multi-model sentiment columns to the DataFrame.
     """
-
     def analyse(text: str) -> tuple:
-        blob       = TextBlob(str(text))
-        polarity   = blob.sentiment.polarity      # -1 to +1
-        subjectivity = blob.sentiment.subjectivity  # 0 to 1
-        return polarity, subjectivity
+        s_text = str(text)
+        # TextBlob
+        blob = TextBlob(s_text)
+        tb_polarity = blob.sentiment.polarity
+        tb_subjectivity = blob.sentiment.subjectivity
 
-    # Apply to every row (same as df["col"].apply(func) in Colab)
+        # VADER
+        vader_scores = _vader.polarity_scores(s_text)
+        vader_compound = vader_scores["compound"]
+        vader_pos = vader_scores["pos"]
+        vader_neg = vader_scores["neg"]
+        vader_neu = vader_scores["neu"]
+
+        return tb_polarity, tb_subjectivity, vader_compound, vader_pos, vader_neg, vader_neu
+
     results = df["clean_text"].apply(analyse)
     df["sentiment_score"]  = results.apply(lambda x: round(x[0], 4))
     df["subjectivity"]     = results.apply(lambda x: round(x[1], 4))
+    df["vader_compound"]   = results.apply(lambda x: round(x[2], 4))
+    df["vader_pos"]        = results.apply(lambda x: round(x[3], 4))
+    df["vader_neg"]        = results.apply(lambda x: round(x[4], 4))
+    df["vader_neu"]        = results.apply(lambda x: round(x[5], 4))
 
-    # Convert numeric score → human-readable label
-    # (like mapping class index → class name after model.predict)
+    # Hybrid sentiment label (using VADER compound score for social media accuracy)
     def label(score: float) -> str:
-        if score > 0.05:
+        if score >= 0.05:
             return "Positive"
-        elif score < -0.05:
+        elif score <= -0.05:
             return "Negative"
         else:
             return "Neutral"
 
-    df["sentiment_label"] = df["sentiment_score"].apply(label)
-
-    # Emoji version — purely for the dashboard UI
-    emoji_map = {"Positive": "Positive", "Negative": "Negative", "Neutral": "Neutral"}
-    df["sentiment_label"] = df["sentiment_label"]  # already set above
-
+    df["sentiment_label"] = df["vader_compound"].apply(label)
     return df
+
+
+def analyze_single_text(text: str) -> dict:
+    """
+    Real-time inference function for custom user input in the dashboard.
+    Returns comprehensive multi-model sentiment metrics.
+    """
+    if not text or not text.strip():
+        return {
+            "text": "",
+            "label": "Neutral",
+            "vader_compound": 0.0,
+            "vader_pos": 0.0,
+            "vader_neg": 0.0,
+            "vader_neu": 1.0,
+            "tb_polarity": 0.0,
+            "tb_subjectivity": 0.0,
+        }
+
+    s_text = text.strip()
+    blob = TextBlob(s_text)
+    tb_polarity = round(blob.sentiment.polarity, 4)
+    tb_subjectivity = round(blob.sentiment.subjectivity, 4)
+
+    vader_scores = _vader.polarity_scores(s_text)
+    compound = round(vader_scores["compound"], 4)
+
+    if compound >= 0.05:
+        lbl = "Positive"
+    elif compound <= -0.05:
+        lbl = "Negative"
+    else:
+        lbl = "Neutral"
+
+    return {
+        "text": s_text,
+        "label": lbl,
+        "vader_compound": compound,
+        "vader_pos": round(vader_scores["pos"], 3),
+        "vader_neg": round(vader_scores["neg"], 3),
+        "vader_neu": round(vader_scores["neu"], 3),
+        "tb_polarity": tb_polarity,
+        "tb_subjectivity": tb_subjectivity,
+    }
 
 
 def get_summary_stats(df: pd.DataFrame) -> dict:
     """
     Compute aggregate stats for the dashboard KPI cards.
-    Returns a dict of headline numbers — avg score, breakdown counts, etc.
-
-    ML ANALOGY: Like a classification report — but for the dashboard.
     """
     total = len(df)
+    if total == 0:
+        return {
+            "total_posts": 0, "avg_score": 0.0, "positive_count": 0, "neutral_count": 0,
+            "negative_count": 0, "positive_pct": 0.0, "neutral_pct": 0.0, "negative_pct": 0.0,
+            "avg_subjectivity": 0.0, "most_positive_topic": "N/A", "most_negative_topic": "N/A"
+        }
+
     counts = df["sentiment_label"].value_counts()
+    score_col = "vader_compound" if "vader_compound" in df.columns else "sentiment_score"
 
     return {
         "total_posts":      total,
-        "avg_score":        round(df["sentiment_score"].mean(), 3),
+        "avg_score":        round(df[score_col].mean(), 3),
         "positive_count":   int(counts.get("Positive", 0)),
         "neutral_count":    int(counts.get("Neutral",  0)),
         "negative_count":   int(counts.get("Negative", 0)),
@@ -83,24 +125,9 @@ def get_summary_stats(df: pd.DataFrame) -> dict:
         "negative_pct":     round(counts.get("Negative", 0) / total * 100, 1),
         "avg_subjectivity": round(df["subjectivity"].mean(), 3),
         "most_positive_topic": (
-            df.groupby("topic")["sentiment_score"].mean().idxmax()
+            df.groupby("topic")[score_col].mean().idxmax()
         ),
         "most_negative_topic": (
-            df.groupby("topic")["sentiment_score"].mean().idxmin()
+            df.groupby("topic")[score_col].mean().idxmin()
         ),
     }
-
-
-if __name__ == "__main__":
-    import sys; sys.path.insert(0, ".")
-    from ingest.mock_fetcher import fetch_posts
-    from transform.cleaner   import clean_posts
-
-    df = clean_posts(fetch_posts(count=20))
-    df = score_sentiment(df)
-
-    print(df[["clean_text", "sentiment_score", "sentiment_label"]].head(5).to_string())
-    print("\n── Summary stats ──")
-    stats = get_summary_stats(df)
-    for k, v in stats.items():
-        print(f"  {k}: {v}")

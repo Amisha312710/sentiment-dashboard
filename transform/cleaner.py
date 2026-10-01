@@ -53,7 +53,7 @@ def clean_posts(raw_posts: list[dict]) -> pd.DataFrame:
     df["clean_text"] = df["text"].apply(clean_text)
 
     # ── Step 4: Parse timestamps ──────────────────────────────────────────────
-    df["created_at"] = pd.to_datetime(df["created_at"])
+    df["created_at"] = pd.to_datetime(df["created_at"], format="ISO8601")
 
     # Add useful time columns for charting (like feature engineering in Colab)
     df["date"]       = df["created_at"].dt.date

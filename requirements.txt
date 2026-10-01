@@ -1,0 +1,6 @@
+streamlit>=1.30.0
+pandas>=2.0.0
+plotly>=5.18.0
+textblob>=0.17.1
+vaderSentiment>=3.3.2
+requests>=2.31.0

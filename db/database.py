@@ -55,9 +55,15 @@ def create_table():
             word_count       INTEGER,
             sentiment_score  REAL,
             subjectivity     REAL,
-            sentiment_label  TEXT
+            sentiment_label  TEXT,
+            vader_compound   REAL
         )
     """)
+    # Migration if table already existed without vader_compound
+    try:
+        conn.execute("ALTER TABLE posts ADD COLUMN vader_compound REAL")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -78,7 +84,7 @@ def save_posts(df: pd.DataFrame) -> int:
         "id", "text", "clean_text", "author", "source", "topic",
         "created_at", "date", "hour", "day_of_week", "upvotes",
         "comments", "word_count", "sentiment_score", "subjectivity",
-        "sentiment_label"
+        "sentiment_label", "vader_compound"
     ]
 
     # Only keep columns that exist in our DataFrame
@@ -136,7 +142,7 @@ def load_posts(
     conn.close()
 
     if not df.empty:
-        df["created_at"] = pd.to_datetime(df["created_at"])
+        df["created_at"] = pd.to_datetime(df["created_at"], format="ISO8601")
         df["date"]       = pd.to_datetime(df["date"]).dt.date
 
     return df

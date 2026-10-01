@@ -1,19 +1,14 @@
 """
 ingest/mock_fetcher.py
 ─────────────────────
-PURPOSE: Fetch raw social media posts.
-In a real project this calls Reddit API (PRAW) or NewsAPI.
-Here we generate realistic mock data so the whole pipeline works
-without needing API keys.
-
-WHAT YOU ALREADY KNOW: This is like loading a CSV in Colab.
-The output is just a list of dictionaries — same as reading rows from a file.
+PURPOSE: Ingest social media & tech news posts.
+Combines real-time public API ingestion (Hacker News API) with a high-fidelity
+synthetic generator fallback to ensure zero downtime and no API key barriers.
 """
 
 import random
 from datetime import datetime, timedelta
-
-# ── Realistic sample posts per topic ──────────────────────────────────────────
+import requests
 
 SAMPLE_POSTS = {
     "AI & Technology": [
@@ -112,55 +107,85 @@ AUTHORS = [
 ]
 
 
-def fetch_posts(topic: str = None, count: int = 80) -> list[dict]:
+def _fetch_live_hackernews(limit: int = 6) -> list[dict]:
+    """Fetch live trending stories directly from Hacker News API."""
+    live_posts = []
+    try:
+        resp = requests.get(
+            "https://hacker-news.firebaseio.com/v0/topstories.json",
+            timeout=2
+        )
+        if resp.status_code == 200:
+            story_ids = resp.json()[:limit]
+            for sid in story_ids:
+                try:
+                    s_resp = requests.get(
+                        f"https://hacker-news.firebaseio.com/v0/item/{sid}.json",
+                        timeout=1.5
+                    )
+                    if s_resp.status_code == 200:
+                        data = s_resp.json()
+                        title = data.get("title", "")
+                        if not title:
+                            continue
+                        dt = datetime.fromtimestamp(data.get("time", datetime.now().timestamp()))
+                        live_posts.append({
+                            "id": f"hn_{sid}",
+                            "text": title,
+                            "author": data.get("by", "hn_user"),
+                            "source": "HackerNews (Live API)",
+                            "topic": "AI & Technology",
+                            "created_at": dt.isoformat(),
+                            "upvotes": data.get("score", 0),
+                            "comments": len(data.get("kids", [])),
+                        })
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return live_posts
+
+
+def fetch_posts(topic: str = None, count: int = 80, use_live_api: bool = True) -> list[dict]:
     """
-    Simulates fetching posts from a social media API.
-
-    Parameters:
-        topic : Filter to a specific topic, or None for all topics
-        count : How many posts to return
-
-    Returns:
-        List of dicts — each dict is one post with all its metadata.
-        This is the same shape of data you'd get from the real Reddit API.
-
-    ML ANALOGY: This is your data loading step — like pd.read_csv() in Colab.
+    Fetches posts using a hybrid strategy:
+    1. Attempts to ingest live items from HackerNews API.
+    2. Backfills/supplements with realistic generated posts across all 5 domains.
     """
-    topics = [topic] if topic else list(SAMPLE_POSTS.keys())
     posts = []
+    if use_live_api and (not topic or topic == "AI & Technology"):
+        live_items = _fetch_live_hackernews(limit=min(15, count // 4))
+        posts.extend(live_items)
 
-    # Generate posts going back 7 days so we have a time dimension to chart
+    topics = [topic] if topic else list(SAMPLE_POSTS.keys())
     now = datetime.now()
 
-    for _ in range(count):
+    remaining = max(0, count - len(posts))
+    for _ in range(remaining):
         chosen_topic = random.choice(topics)
         text = random.choice(SAMPLE_POSTS[chosen_topic])
-
-        # Add slight variation so not every post is identical
         variations = ["", " Thoughts?", " Discuss.", " What do you think?", ""]
         text = text + random.choice(variations)
 
-        # Random timestamp within the last 7 days
-        hours_ago = random.uniform(0, 168)  # 168 hours = 7 days
+        hours_ago = random.uniform(0, 168)
         timestamp = now - timedelta(hours=hours_ago)
 
         posts.append({
-            "id":         f"post_{random.randint(100000, 999999)}",
-            "text":       text,
-            "author":     random.choice(AUTHORS),
-            "source":     random.choice(SOURCES),
-            "topic":      chosen_topic,
+            "id": f"post_{random.randint(100000, 999999)}",
+            "text": text,
+            "author": random.choice(AUTHORS),
+            "source": random.choice(SOURCES),
+            "topic": chosen_topic,
             "created_at": timestamp.isoformat(),
-            "upvotes":    random.randint(0, 2400),
-            "comments":   random.randint(0, 340),
+            "upvotes": random.randint(0, 2400),
+            "comments": random.randint(0, 340),
         })
 
     return posts
 
 
 if __name__ == "__main__":
-    # Quick test — run this file directly to see sample output
     posts = fetch_posts(count=5)
     for p in posts:
-        print(f"[{p['topic']}] {p['text'][:60]}...")
+        print(f"[{p['source']} | {p['topic']}] {p['text'][:60]}...")
     print(f"\nTotal fetched: {len(fetch_posts())} posts")
