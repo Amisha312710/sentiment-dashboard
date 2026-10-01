@@ -70,7 +70,6 @@ def get_topic_data():
     return get_topic_summary()
 
 df = get_data(selected_topic, selected_label, days_back)
-topic_df = get_topic_data()
 
 # Auto-seed database if fresh deployment / empty
 if df.empty:
@@ -78,7 +77,12 @@ if df.empty:
         run_pipeline(post_count=120)
         st.cache_data.clear()
         df = get_data(selected_topic, selected_label, days_back)
-        topic_df = get_topic_data()
+
+topic_df = get_topic_data()
+
+if df.empty:
+    st.warning('No posts match the current filter. Try resetting filters in the sidebar.')
+    st.stop()
 
 st.markdown('<div class="dashboard-header"><p class="dashboard-title">Social Media Sentiment Analytics Engine</p><p class="dashboard-subtitle">Automated ETL Pipeline & Multi-Model NLP (VADER + TextBlob) across 5 Key Domains</p></div>', unsafe_allow_html=True)
 

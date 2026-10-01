@@ -2,25 +2,12 @@
 db/database.py
 ──────────────
 PURPOSE: Save processed posts to a SQLite database and read them back.
-
-WHAT YOU ALREADY KNOW: In Colab you'd do df.to_csv("results.csv").
-SQLite does the same thing but the file is a proper database, meaning:
-  - You can query it with SQL: SELECT * WHERE sentiment_label = 'Negative'
-  - It handles duplicate rows automatically (we check by post id)
-  - It's much faster to read specific slices than reading a whole CSV
-
-WHY NOT JUST CSV: Dashboards need to filter/aggregate data on the fly.
-SQL is 10x faster and cleaner than reading a CSV and filtering in pandas.
-Also — every pipeline run appends new rows rather than overwriting.
-
-The database is one file: data/sentiment.db
 """
 
 import sqlite3
 import pandas as pd
 import os
 
-# Path to the database file (created automatically if it doesn't exist)
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "sentiment.db")
 
 
@@ -33,9 +20,6 @@ def get_connection() -> sqlite3.Connection:
 def create_table():
     """
     Create the posts table if it doesn't already exist.
-    This is like defining your DataFrame schema upfront.
-
-    Columns mirror what cleaner.py + sentiment.py produce.
     """
     conn = get_connection()
     conn.execute("""
@@ -59,7 +43,6 @@ def create_table():
             vader_compound   REAL
         )
     """)
-    # Migration if table already existed without vader_compound
     try:
         conn.execute("ALTER TABLE posts ADD COLUMN vader_compound REAL")
     except sqlite3.OperationalError:
@@ -69,15 +52,6 @@ def create_table():
 
 
 def save_posts(df: pd.DataFrame) -> int:
-    """
-    Insert new posts into the database.
-    Skips rows whose 'id' already exists (no duplicates on re-runs).
-
-    Returns the number of NEW rows actually inserted.
-
-    ML ANALOGY: Like saving your model predictions to a results file,
-    but smarter — won't overwrite if you run the pipeline twice.
-    """
     create_table()
 
     cols = [
@@ -87,7 +61,6 @@ def save_posts(df: pd.DataFrame) -> int:
         "sentiment_label", "vader_compound"
     ]
 
-    # Only keep columns that exist in our DataFrame
     save_df = df[[c for c in cols if c in df.columns]].copy()
     save_df["created_at"] = save_df["created_at"].astype(str)
     save_df["date"]       = save_df["date"].astype(str)
@@ -95,7 +68,6 @@ def save_posts(df: pd.DataFrame) -> int:
     conn = get_connection()
     before = pd.read_sql("SELECT COUNT(*) as n FROM posts", conn).iloc[0]["n"]
 
-    # INSERT OR IGNORE = skip if id already exists
     save_df.to_sql("posts_temp", conn, if_exists="replace", index=False)
     conn.execute("""
         INSERT OR IGNORE INTO posts
@@ -115,18 +87,7 @@ def load_posts(
     label: str = None,
     days: int  = 7,
 ) -> pd.DataFrame:
-    """
-    Read posts from the database back into a DataFrame.
-
-    Parameters:
-        topic : Filter by topic name (or None for all)
-        label : Filter by 'Positive', 'Negative', 'Neutral' (or None)
-        days  : How many past days to load
-
-    Returns: DataFrame ready for the dashboard to use.
-
-    ML ANALOGY: Like pd.read_csv() but with built-in filtering.
-    """
+    create_table()
     conn   = get_connection()
     query  = f"""
         SELECT *
@@ -138,45 +99,44 @@ def load_posts(
     if label:
         query += f" AND sentiment_label = '{label}'"
 
-    df = pd.read_sql(query, conn)
-    conn.close()
+    try:
+        df = pd.read_sql(query, conn)
+    except Exception:
+        df = pd.DataFrame()
+    finally:
+        conn.close()
 
     if not df.empty:
-        df["created_at"] = pd.to_datetime(df["created_at"], format="ISO8601")
-        df["date"]       = pd.to_datetime(df["date"]).dt.date
+        try:
+            df["created_at"] = pd.to_datetime(df["created_at"], format="ISO8601")
+        except Exception:
+            df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
+        try:
+            df["date"] = pd.to_datetime(df["date"]).dt.date
+        except Exception:
+            pass
 
     return df
 
 
 def get_topic_summary() -> pd.DataFrame:
-    """Returns per-topic aggregate stats — used by dashboard charts."""
+    create_table()
     conn = get_connection()
-    df   = pd.read_sql("""
-        SELECT
-            topic,
-            COUNT(*)                     AS total_posts,
-            ROUND(AVG(sentiment_score), 3) AS avg_score,
-            SUM(CASE WHEN sentiment_label='Positive' THEN 1 ELSE 0 END) AS positive,
-            SUM(CASE WHEN sentiment_label='Neutral'  THEN 1 ELSE 0 END) AS neutral,
-            SUM(CASE WHEN sentiment_label='Negative' THEN 1 ELSE 0 END) AS negative
-        FROM posts
-        GROUP BY topic
-        ORDER BY avg_score DESC
-    """, conn)
-    conn.close()
+    try:
+        df = pd.read_sql("""
+            SELECT
+                topic,
+                COUNT(*)                     AS total_posts,
+                ROUND(AVG(COALESCE(vader_compound, sentiment_score)), 3) AS avg_score,
+                SUM(CASE WHEN sentiment_label='Positive' THEN 1 ELSE 0 END) AS positive,
+                SUM(CASE WHEN sentiment_label='Neutral'  THEN 1 ELSE 0 END) AS neutral,
+                SUM(CASE WHEN sentiment_label='Negative' THEN 1 ELSE 0 END) AS negative
+            FROM posts
+            GROUP BY topic
+            ORDER BY avg_score DESC
+        """, conn)
+    except Exception:
+        df = pd.DataFrame()
+    finally:
+        conn.close()
     return df
-
-
-if __name__ == "__main__":
-    import sys; sys.path.insert(0, ".")
-    from ingest.mock_fetcher import fetch_posts
-    from transform.cleaner   import clean_posts
-    from analyze.sentiment   import score_sentiment
-
-    df      = score_sentiment(clean_posts(fetch_posts(count=30)))
-    inserted = save_posts(df)
-    print(f"Inserted {inserted} new rows")
-
-    loaded  = load_posts()
-    print(f"Total in DB: {len(loaded)} rows")
-    print(get_topic_summary().to_string(index=False))
